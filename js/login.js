@@ -80,7 +80,7 @@ async function loginStudent(e) {
 
             .eq("dob", dob)
 
-            .single();
+            .maybeSingle();
 
         if (error || !data) {
 
