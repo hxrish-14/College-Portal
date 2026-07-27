@@ -410,8 +410,7 @@ return Number(num).toLocaleString();
 
 /*
 ----------------------------------------------------
-PAGE PROTECTION
-----------------------------------------------------
+PAGE
 */
 
 function protectPage(){
