@@ -1,124 +1,136 @@
-/*==================================================
-Student Portal Login
-==================================================*/
+/*=========================================================
+    STUDENT RESULT MODULE
+    PART 1
+=========================================================*/
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
 
-    // Already logged in
-    if (isLoggedIn()) {
-        window.location.href = "student.html";
+    protectPage();
+
+    const session = getSession();
+
+    if (!session) {
+        window.location.href = "index.html";
         return;
     }
 
-    const form = document.getElementById("loginForm");
-    const message = document.getElementById("message");
+    loadStudentInfo(session);
 
-    if (!form) return;
+    const semesterSelect =
+        document.getElementById("semesterSelect");
 
-    form.addEventListener("submit", loginStudent);
+    if (getSemester()) {
+        semesterSelect.value = getSemester();
+    }
+
+    await loadResults(
+        session.regno,
+        semesterSelect.value
+    );
+
+    semesterSelect.addEventListener(
+        "change",
+        async function () {
+
+            saveSemester(this.value);
+
+            await loadResults(
+                session.regno,
+                this.value
+            );
+
+        }
+
+    );
 
 });
 
-/*==================================================
-LOGIN FUNCTION
-==================================================*/
 
-async function loginStudent(e) {
+/*=========================================================
+    LOAD STUDENT INFORMATION
+=========================================================*/
 
-    e.preventDefault();
+function loadStudentInfo(student) {
 
-    const regno = document
-        .getElementById("regno")
-        .value
-        .trim()
-        .toUpperCase();
+    document.getElementById("studentName").textContent =
+        student.name || "-";
 
-    const dob = document
-        .getElementById("dob")
-        .value;
+    document.getElementById("studentReg").textContent =
+        student.regno || "-";
 
-    const message =
-        document.getElementById("message");
+    document.getElementById("studentDept").textContent =
+        student.department || "-";
 
-    message.innerHTML = "";
-    message.style.color = "#ffffff";
+    document.getElementById("studentBatch").textContent =
+        student.batch || "-";
 
-    if (regno === "" || dob === "") {
+}
 
-        message.style.color = "#ef4444";
-        message.innerHTML = "Please enter Register Number and Date of Birth.";
 
-        showToast(
-            "All fields are required.",
-            "error"
-        );
+/*=========================================================
+    LOAD RESULTS
+=========================================================*/
 
-        return;
+async function loadResults(regno, semester) {
 
-    }
-
-    const btn =
-        document.querySelector("button");
-
-    btn.disabled = true;
-    btn.innerHTML = "Checking...";
+    showLoading("resultContainer");
 
     try {
 
-        const {
+        const sem = Number(semester);
 
-            data,
-            error
+        const { data, error } =
+            await supabaseClient
 
-        } = await supabaseClient
+                .from("results")
 
-            .from(TABLES.students)
+                .select("*")
 
-            .select("*")
+                .eq("regno", regno)
 
-            .eq("regno", regno)
+                .eq("semester", sem)
 
-            .eq("dob", dob)
+                .order(
+                    "subject_code",
+                    {
+                        ascending: true
+                    }
+                );
 
-            .maybeSingle();
+        console.log("Session Reg No :", regno);
+        console.log("Semester :", sem);
+        console.log("Results :", data);
+        console.log("Supabase Error :", error);
 
-        if (error || !data) {
+        if (error) {
 
-            btn.disabled = false;
-            btn.innerHTML = "Login";
+            throw error;
 
-            message.style.color = "#ef4444";
+        }
 
-            message.innerHTML =
-                "Invalid Register Number or Date of Birth.";
+        if (!data || data.length === 0) {
 
-            showToast(
-                "Login Failed",
-                "error"
+            emptyState(
+
+                "resultContainer",
+
+                "No Result Found For Semester " + sem
+
             );
 
             return;
 
         }
 
-        saveSession(data);
+        renderTable(data);
 
-        showToast(
-            "Login Successful",
-            "success"
+        updateSummary(
+
+            data,
+
+            sem
+
         );
-
-        message.style.color = "#22c55e";
-
-        message.innerHTML =
-            "Redirecting...";
-
-        setTimeout(() => {
-
-            window.location.href =
-                "student.html";
-
-        }, 1000);
 
     }
 
@@ -126,136 +138,595 @@ async function loginStudent(e) {
 
         console.error(err);
 
-        btn.disabled = false;
-        btn.innerHTML = "Login";
+        showError(
 
-        message.style.color = "#ef4444";
+            "resultContainer",
 
-        message.innerHTML =
-            "Unable to connect to server.";
+            err.message
+
+        );
 
         showToast(
-            "Server Error",
+
+            "Unable to load result",
+
             "error"
+
         );
 
     }
 
 }
+/*=========================================================
+    RENDER RESULT TABLE
+=========================================================*/
 
-/*==================================================
-ENTER KEY SUPPORT
-==================================================*/
+function renderTable(results) {
 
-document.addEventListener("keypress", function (e) {
+    const container =
+        document.getElementById("resultContainer");
 
-    if (e.key === "Enter") {
+    const tableBody =
+        document.getElementById("resultTableBody");
 
-        const form =
-            document.getElementById("loginForm");
+    if (!container || !tableBody) return;
 
-        if (form) {
+    container.style.display = "block";
 
-            form.dispatchEvent(
+    tableBody.innerHTML = "";
 
-                new Event(
-                    "submit",
-                    {
-                        cancelable: true
-                    }
-                )
+    results.forEach(subject => {
 
-            );
+        const row = document.createElement("tr");
+
+        const status =
+            (subject.result || "PASS").toUpperCase();
+
+        const badge =
+            status === "PASS"
+            ? '<span class="badge badge-success">PASS</span>'
+            : '<span class="badge badge-danger">FAIL</span>';
+
+        row.innerHTML = `
+
+            <td>${subject.subject_code ?? "-"}</td>
+
+            <td>${subject.subject_name ?? "-"}</td>
+
+            <td>${subject.internal ?? 0}</td>
+
+            <td>${subject.external ?? 0}</td>
+
+            <td>${subject.total ?? 0}</td>
+
+            <td>${subject.grade ?? "-"}</td>
+
+            <td>${badge}</td>
+
+        `;
+
+        tableBody.appendChild(row);
+
+    });
+
+}
+
+
+/*=========================================================
+    UPDATE SUMMARY
+=========================================================*/
+
+async function updateSummary(results, semester) {
+
+    document.getElementById("semesterValue").textContent =
+        semester;
+
+    document.getElementById("subjectCount").textContent =
+        results.length;
+
+    let totalMarks = 0;
+    let totalGradePoints = 0;
+    let passCount = 0;
+    let failCount = 0;
+
+    results.forEach(subject => {
+
+        totalMarks +=
+            Number(subject.total || 0);
+
+        totalGradePoints +=
+            Number(subject.grade_point || 0);
+
+        if (
+            (subject.result || "")
+            .toUpperCase() === "PASS"
+        ) {
+
+            passCount++;
+
+        }
+        else {
+
+            failCount++;
+
+        }
+
+    });
+
+    document.getElementById("totalMarks").textContent =
+        totalMarks;
+
+    const sgpa =
+        results.length > 0
+            ? (
+                totalGradePoints /
+                results.length
+              ).toFixed(2)
+            : "0.00";
+
+    document.getElementById("sgpaValue").textContent =
+        sgpa;
+
+    const status =
+        document.getElementById("semesterStatus");
+
+    if (failCount === 0) {
+
+        status.className =
+            "badge badge-success";
+
+        status.textContent =
+            "PASS";
+
+    }
+    else {
+
+        status.className =
+            "badge badge-danger";
+
+        status.textContent =
+            "FAIL";
+
+    }
+
+    document.getElementById("passCount").textContent =
+        passCount;
+
+    document.getElementById("failCount").textContent =
+        failCount;
+
+    await calculateOverallCGPA();
+
+}
+/*=========================================================
+    CALCULATE OVERALL CGPA
+=========================================================*/
+
+async function calculateOverallCGPA() {
+
+    const session = getSession();
+
+    if (!session) return;
+
+    try {
+
+        const { data, error } =
+            await supabaseClient
+
+                .from("results")
+
+                .select("grade_point")
+
+                .eq("regno", session.regno);
+
+        if (error) {
+
+            throw error;
+
+        }
+
+        if (!data || data.length === 0) {
+
+            document.getElementById("cgpaValue")
+                .textContent = "0.00";
+
+            return;
+
+        }
+
+        let total = 0;
+
+        data.forEach(row => {
+
+            total += Number(row.grade_point || 0);
+
+        });
+
+        const cgpa = (
+
+            total /
+
+            data.length
+
+        ).toFixed(2);
+
+        document.getElementById("cgpaValue")
+            .textContent = cgpa;
+
+    }
+
+    catch (err) {
+
+        console.error(err);
+
+        document.getElementById("cgpaValue")
+            .textContent = "--";
+
+    }
+
+}
+
+
+/*=========================================================
+    REFRESH RESULTS
+=========================================================*/
+
+async function refreshResults() {
+
+    const session = getSession();
+
+    if (!session) return;
+
+    const semester =
+
+        document.getElementById("semesterSelect").value;
+
+    await loadResults(
+
+        session.regno,
+
+        semester
+
+    );
+
+    showToast(
+
+        "Results refreshed",
+
+        "success"
+
+    );
+
+}
+
+
+/*=========================================================
+    RESULT STATISTICS
+=========================================================*/
+
+function getResultStatistics(results) {
+
+    let pass = 0;
+    let fail = 0;
+
+    let highest = 0;
+    let lowest = 100;
+
+    results.forEach(subject => {
+
+        const mark = Number(subject.total || 0);
+
+        if (mark > highest) {
+
+            highest = mark;
+
+        }
+
+        if (mark < lowest) {
+
+            lowest = mark;
+
+        }
+
+        if (
+
+            (subject.result || "")
+            .toUpperCase() === "PASS"
+
+        ) {
+
+            pass++;
+
+        }
+
+        else {
+
+            fail++;
+
+        }
+
+    });
+
+    return {
+
+        pass,
+
+        fail,
+
+        highest,
+
+        lowest
+
+    };
+
+}
+
+
+/*=========================================================
+    PRINT RESULT
+=========================================================*/
+
+function printResult() {
+
+    window.print();
+
+}
+
+
+/*=========================================================
+    DOWNLOAD BUTTON
+=========================================================*/
+
+const pdfButton =
+
+    document.getElementById("downloadPdf");
+
+if (pdfButton) {
+
+    pdfButton.addEventListener(
+
+        "click",
+
+        async () => {
+
+            if (
+
+                typeof downloadResultPDF ===
+
+                "function"
+
+            ) {
+
+                await downloadResultPDF();
+
+            }
+
+            else {
+
+                showToast(
+
+                    "PDF module not found",
+
+                    "error"
+
+                );
+
+            }
+
+        }
+
+    );
+
+}
+/*=========================================================
+    SHOW SUBJECT DETAILS
+=========================================================*/
+
+function showSubjectDetails(subject) {
+
+    const modal =
+        document.getElementById("resultModal");
+
+    const content =
+        document.getElementById("modalContent");
+
+    if (!modal || !content) return;
+
+    content.innerHTML = `
+
+        <div class="info-grid">
+
+            <div class="info-item">
+                <div class="info-title">Subject Code</div>
+                <div class="info-value">${subject.code}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">Subject Name</div>
+                <div class="info-value">${subject.subject}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">Internal Mark</div>
+                <div class="info-value">${subject.internal}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">External Mark</div>
+                <div class="info-value">${subject.external}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">Total</div>
+                <div class="info-value">${subject.total}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">Grade</div>
+                <div class="info-value">${subject.grade}</div>
+            </div>
+
+            <div class="info-item">
+                <div class="info-title">Result</div>
+                <div class="info-value">${subject.result}</div>
+            </div>
+
+        </div>
+
+    `;
+
+    modal.classList.add("active");
+
+}
+
+
+/*=========================================================
+    TABLE ROW CLICK
+=========================================================*/
+
+document.addEventListener("click", function (e) {
+
+    const row = e.target.closest("#resultTableBody tr");
+
+    if (!row) return;
+
+    const cells = row.querySelectorAll("td");
+
+    showSubjectDetails({
+
+        code: cells[0].textContent,
+
+        subject: cells[1].textContent,
+
+        internal: cells[2].textContent,
+
+        external: cells[3].textContent,
+
+        total: cells[4].textContent,
+
+        grade: cells[5].textContent,
+
+        result: cells[6].textContent
+
+    });
+
+});
+
+
+/*=========================================================
+    CLOSE MODAL
+=========================================================*/
+
+window.addEventListener("click", function (e) {
+
+    const modal =
+        document.getElementById("resultModal");
+
+    if (!modal) return;
+
+    if (e.target === modal) {
+
+        modal.classList.remove("active");
+
+    }
+
+});
+
+
+/*=========================================================
+    KEYBOARD SHORTCUTS
+=========================================================*/
+
+document.addEventListener("keydown", function (e) {
+
+    if (e.ctrlKey && e.key.toLowerCase() === "p") {
+
+        e.preventDefault();
+
+        window.print();
+
+    }
+
+    if (e.key === "Escape") {
+
+        const modal =
+            document.getElementById("resultModal");
+
+        if (modal) {
+
+            modal.classList.remove("active");
 
         }
 
     }
 
-});
+    if (e.key === "F5") {
 
-/*==================================================
-INPUT EFFECT
-==================================================*/
+        e.preventDefault();
 
-const inputs =
-    document.querySelectorAll("input");
-
-inputs.forEach(input => {
-
-    input.addEventListener("focus", () => {
-
-        input.parentElement.classList.add(
-            "active"
-        );
-
-    });
-
-    input.addEventListener("blur", () => {
-
-        input.parentElement.classList.remove(
-            "active"
-        );
-
-    });
-
-});
-
-/*==================================================
-LOADING EFFECT
-==================================================*/
-
-function startLoading() {
-
-    const btn =
-        document.querySelector("button");
-
-    btn.disabled = true;
-
-    btn.innerHTML =
-
-        `
-        <span style="display:flex;
-        justify-content:center;
-        align-items:center;
-        gap:10px">
-
-        <span class="loader"
-        style="
-        width:18px;
-        height:18px;
-        border-width:3px"></span>
-
-        Checking
-
-        </span>
-        `;
-
-}
-
-function stopLoading() {
-
-    const btn =
-        document.querySelector("button");
-
-    btn.disabled = false;
-
-    btn.innerHTML = "Login";
-
-}
-
-/*==================================================
-AUTO FOCUS
-==================================================*/
-
-window.onload = () => {
-
-    const reg =
-        document.getElementById("regno");
-
-    if (reg) {
-
-        reg.focus();
+        refreshResults();
 
     }
 
-};
+});
+
+
+/*=========================================================
+    FORMAT NUMBER
+=========================================================*/
+
+function formatNumber(value) {
+
+    return Number(value || 0).toFixed(2);
+
+}
+
+
+/*=========================================================
+    GET CURRENT RESULT DATA
+=========================================================*/
+
+function getCurrentResultData() {
+
+    const rows = [
+
+        ...document.querySelectorAll(
+
+            "#resultTableBody tr"
+
+        )
+
+    ];
+
+    return rows.map(row => {
+
+        const cells = row.querySelectorAll("td");
+
+        return {
+
+            subject_code: cells[0].textContent,
+
+            subject_name: cells[1].textContent,
+
+            internal: cells[2].textContent,
+
+            external: cells[3].textContent,
+
+            total: cells[4].textContent,
+
+            grade: cells[5].textContent,
+
+            result: cells[6].textContent
+
+        };
+
+    });
+
+}
+
+
+/*=========================================================
+    PAGE READY
+=========================================================*/
+
+console.log("Student Result Module Loaded Successfully");
