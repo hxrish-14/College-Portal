@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Student Portal — view your profile and semester results, online or offline.">
+<meta name="color-scheme" content="light dark">
+<title>Student Portal</title>
+
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://unpkg.com/@supabase/supabase-js"></script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark">SP</span>
+    <span>Student Portal</span>
+  </div>
+
+  <nav class="app-nav" aria-label="Primary">
+    <a href="#" data-view-link="dashboard" class="active"><span class="nav-label">Dashboard</span></a>
+    <a href="#" data-view-link="results"><span class="nav-label">Results</span></a>
+    <a href="#" data-view-link="about"><span class="nav-label">About</span></a>
+    <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
+  </nav>
+
+  <div class="header-actions">
+    <span class="status-pill" id="statusPill"><span class="status-dot"></span>Online</span>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode"></button>
+    <button class="btn btn-outline" data-logout type="button">Logout</button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ===================== LOGIN VIEW ===================== -->
+  <section class="view active" id="view-login">
+    <div class="login-shell">
+      <div class="login-card">
+        <span class="eyebrow">Student Access</span>
+        <h1>Sign in to your record.</h1>
+        <p class="sub">Enter your registration number and date of birth to view your profile and semester results.</p>
+
+        <form id="loginForm" novalidate>
+          <div class="field">
+            <label for="regno">Registration Number</label>
+            <input type="text" id="regno" name="regno" placeholder="e.g. 22MCA001" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="dob">Date of Birth</label>
+            <input type="date" id="dob" name="dob" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
+          <p id="loginMessage" role="alert"></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DASHBOARD VIEW ===================== -->
+  <section class="view" id="view-dashboard">
+    <div class="container">
+      <div class="page-head">
+        <span class="eyebrow">Overview</span>
+        <h1 id="dashName">Welcome</h1>
+        <p id="dashSub"></p>
+      </div>
+
+      <div class="profile-strip">
+        <div class="avatar"><img id="avatarImg" alt="Student photo" loading="lazy"></div>
+        <div>
+          <h2 id="dashProfileName">Profile</h2>
+          <div class="profile-meta" id="profileMeta"></div>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">Current Semester</div><div class="stat-value" id="statSemester">—</div></div>
+        <div class="stat-card"><div class="stat-label">Overall CGPA</div><div class="stat-value" id="statCgpa">0.00</div></div>
+        <div class="stat-card"><div class="stat-label">Attendance</div><div class="stat-value" id="statAttendance">—</div></div>
+        <div class="stat-card">
+          <div class="stat-label">Overall Status</div>
+          <div class="stat-value"><span class="badge badge-pass" id="statStatus">—</span></div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Student Information</h2>
+        <div class="info-grid" id="infoGrid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULTS VIEW ===================== -->
+  <section class="view" id="view-results">
+    <div class="container">
+      <div class="page-head">
+        <span class="eyebrow">Academic Record</span>
+        <h1>Semester Results</h1>
+        <p>Select a semester to view subject-wise marks, grade, and status.</p>
+      </div>
+
+      <div class="results-toolbar">
+        <div class="semester-tabs" id="semesterTabs" role="tablist" aria-label="Semester"></div>
+        <div class="button-row">
+          <button class="btn btn-outline" id="refreshBtn" type="button">Refresh</button>
+          <button class="btn btn-primary" id="downloadPdfBtn" type="button">Download PDF</button>
+        </div>
+      </div>
+
+      <div class="ledger" id="resultContainer">
+        <div class="ledger-head">
+          <div>Code</div><div>Subject</div><div>Internal</div><div>External</div><div>Total</div><div>Grade</div><div>Result</div>
+        </div>
+
+        <div id="ledgerLoading" class="hidden">
+          <div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+          <div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+          <div class="skeleton-row"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
+        </div>
+
+        <div id="ledgerBody"></div>
+
+        <div id="ledgerEmpty" class="empty-state hidden">
+          <div class="glyph">＋</div>
+          <h3>No Results Yet</h3>
+          <p>No academic result is available for this semester.</p>
+        </div>
+      </div>
+
+      <div class="summary-row">
+        <div class="stat-card"><div class="stat-label">Subjects</div><div class="stat-value" id="summarySubjects">0</div></div>
+        <div class="stat-card"><div class="stat-label">Total Marks</div><div class="stat-value" id="summaryTotal">0</div></div>
+        <div class="stat-card"><div class="stat-label">Status</div><div class="stat-value"><span class="badge badge-pass" id="resultStatusBadge">—</span></div></div>
+        <div class="seal-card stat-card"><div class="stat-label">Semester SGPA</div><div class="stat-value" id="summarySgpa">0.00</div></div>
+        <div class="seal-card stat-card"><div class="stat-label">Overall CGPA</div><div class="stat-value" id="summaryCgpa">0.00</div></div>
+      </div>
+
+      <p class="mono" id="lastSyncedNote" style="margin-top:16px; color:var(--text-muted); font-size:12.5px;"></p>
+    </div>
+  </section>
+
+  <!-- ===================== ABOUT VIEW ===================== -->
+  <section class="view" id="view-about">
+    <div class="container">
+      <div class="page-head">
+        <span class="eyebrow">About</span>
+        <h1>About Student Portal</h1>
+        <p>A modern academic record system built for students and reviewers alike.</p>
+      </div>
+
+      <div class="section-card">
+        <h2>Project Overview</h2>
+        <p style="color:var(--text-secondary); line-height:1.7;">Student Portal lets a student sign in with their registration number and date of birth to view their profile, semester-wise results, SGPA, and CGPA — with a downloadable PDF copy of any semester and an offline mode that shows the last synchronized data when there's no connection.</p>
+      </div>
+
+      <div class="section-card">
+        <h2>Technology</h2>
+        <div class="info-grid">
+          <div class="info-item"><div class="info-title">Frontend</div><div class="info-value">HTML5, CSS3, Vanilla JS</div></div>
+          <div class="info-item"><div class="info-title">Backend</div><div class="info-value">Supabase / PostgreSQL</div></div>
+          <div class="info-item"><div class="info-title">Offline Cache</div><div class="info-value">IndexedDB</div></div>
+          <div class="info-item"><div class="info-title">PDF Export</div><div class="info-value">jsPDF</div></div>
+        </div>
+      </div>
+
+      <div class="section-card">
+        <h2>Security Note</h2>
+        <p style="color:var(--text-secondary); line-height:1.7;">Registration Number + Date of Birth is a convenience check, not strong authentication — a static site cannot keep a secret. See <span class="mono">database.sql</span> and <span class="mono">README.md</span> for the full explanation and safer alternatives.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="app-footer">
+  <span class="foot-left">© 2026 Student Portal</span>
+  <span class="foot-center">v1.0.0</span>
+  <span class="foot-right">Built with Supabase</span>
+</footer>
+
+<!-- ===================== SUBJECT MODAL ===================== -->
+<div class="modal-overlay" id="subjectModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modalTitle">Subject Details</h3>
+      <button class="modal-close" id="modalClose" type="button" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
